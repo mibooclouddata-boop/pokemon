@@ -4,6 +4,7 @@ const path = require("path");
 const STATE_FILE = path.join(__dirname, "..", "state", "last_stock.json");
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const TEST_MODE = process.env.TEST_MODE === "true";
 const MAX_ITEMS_IN_MESSAGE = 30;
 
 const headers = {
@@ -68,6 +69,24 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;");
 }
 
+function buildMessage(items, total, title) {
+  const shown = items.slice(0, MAX_ITEMS_IN_MESSAGE);
+  const lines = shown.map((p) => {
+    const price = (p.salePrice ?? 0).toLocaleString("ko-KR");
+    const link = `https://www.pokemonstore.co.kr/pages/product/product-detail.html?productNo=${p.productNo}`;
+    return `• <a href="${link}">${escapeHtml(p.productName)}</a> - ${price}원`;
+  });
+
+  let message = `${title}\n\n${lines.join("\n")}`;
+
+  if (items.length > MAX_ITEMS_IN_MESSAGE) {
+    message += `\n... 외 ${items.length - MAX_ITEMS_IN_MESSAGE}개`;
+  }
+
+  message += `\n\n현재 총 구매 가능: ${total}개`;
+  return message;
+}
+
 async function sendTelegram(text) {
   const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
   const res = await fetch(url, {
@@ -89,6 +108,23 @@ async function sendTelegram(text) {
 
 (async () => {
   const { total, items } = await loadItems();
+
+  if (TEST_MODE) {
+    const sample = items.slice(0, 3);
+    if (sample.length === 0) {
+      console.log("Test mode - no items currently on sale to sample.");
+      return;
+    }
+    const message = buildMessage(
+      sample,
+      total,
+      `🧪 [테스트] 알림 동작 확인용 메시지입니다 (실제 재입고 아님)`
+    );
+    await sendTelegram(message);
+    console.log("Test mode - sent sample notification, state not changed.");
+    return;
+  }
+
   const prevIds = loadPrevIds();
   const currentIds = items.map((p) => p.productNo);
 
@@ -104,21 +140,11 @@ async function sendTelegram(text) {
   const newItems = items.filter((p) => !prevSet.has(p.productNo));
 
   if (newItems.length > 0) {
-    const shown = newItems.slice(0, MAX_ITEMS_IN_MESSAGE);
-    const lines = shown.map((p) => {
-      const price = (p.salePrice ?? 0).toLocaleString("ko-KR");
-      const link = `https://www.pokemonstore.co.kr/pages/product/product-detail.html?productNo=${p.productNo}`;
-      return `• <a href="${link}">${escapeHtml(p.productName)}</a> - ${price}원`;
-    });
-
-    let message = `🎉 새로 구매 가능한 상품 ${newItems.length}개!\n\n${lines.join("\n")}`;
-
-    if (newItems.length > MAX_ITEMS_IN_MESSAGE) {
-      message += `\n... 외 ${newItems.length - MAX_ITEMS_IN_MESSAGE}개`;
-    }
-
-    message += `\n\n현재 총 구매 가능: ${total}개`;
-
+    const message = buildMessage(
+      newItems,
+      total,
+      `🎉 새로 구매 가능한 상품 ${newItems.length}개!`
+    );
     await sendTelegram(message);
     console.log(`Notified about ${newItems.length} new items.`);
   } else {
