@@ -1,0 +1,15 @@
+[Unit]
+Description=Pokemon store stock check + Telegram notifier
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/pokemon
+EnvironmentFile=/home/ubuntu/pokemon/.env
+ExecStart=/usr/bin/node /home/ubuntu/pokemon/scripts/daemon.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

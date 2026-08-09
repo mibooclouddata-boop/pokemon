@@ -106,10 +106,10 @@ async function sendTelegram(text) {
   }
 }
 
-(async () => {
+async function checkOnce({ testMode = TEST_MODE } = {}) {
   const { total, items } = await loadItems();
 
-  if (TEST_MODE) {
+  if (testMode) {
     const sample = items.slice(0, 3);
     if (sample.length === 0) {
       console.log("Test mode - no items currently on sale to sample.");
@@ -152,7 +152,13 @@ async function sendTelegram(text) {
   }
 
   saveState(currentIds);
-})().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+}
+
+module.exports = { checkOnce };
+
+if (require.main === module) {
+  checkOnce().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
