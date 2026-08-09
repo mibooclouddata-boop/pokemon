@@ -79,7 +79,9 @@ async function handleCommand(chatId, text) {
         await sendMessage(chatId, "현재 판매중인 상품이 없습니다.");
         return;
       }
-      const message = buildMessage(lastResult.items, lastResult.total, "📦 현재 판매중 상품 목록");
+      const message = buildMessage(lastResult.items, lastResult.total, "📦 현재 판매중 상품 목록", {
+        showHint: false,
+      });
       await sendMessage(chatId, message);
       return;
     }

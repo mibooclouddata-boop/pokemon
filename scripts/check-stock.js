@@ -129,11 +129,11 @@ function purchasabilityHint(p) {
   return "";
 }
 
-function buildMessage(items, total, title) {
+function buildMessage(items, total, title, { showHint = true } = {}) {
   const shown = items.slice(0, MAX_ITEMS_IN_MESSAGE);
   const lines = shown.map((p) => {
     const price = (p.salePrice ?? 0).toLocaleString("ko-KR");
-    const hint = purchasabilityHint(p);
+    const hint = showHint ? purchasabilityHint(p) : "";
     return `• <a href="${productLink(p.productNo)}">${escapeHtml(p.productName)}</a> - ${price}원${hint ? ` (${hint})` : ""}`;
   });
 
