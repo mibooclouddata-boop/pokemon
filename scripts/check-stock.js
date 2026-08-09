@@ -36,7 +36,10 @@ async function getPage(page) {
   );
 
   if (!res.ok) {
-    throw new Error(`Stock API request failed: ${res.status}`);
+    const body = await res.text().catch(() => "");
+    const err = new Error(`Stock API request failed: ${res.status} ${body.slice(0, 200)}`);
+    err.status = res.status;
+    throw err;
   }
 
   return res.json();
