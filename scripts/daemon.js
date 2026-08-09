@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { checkOnce } = require("./check-stock");
+const { checkOnce, getStatus } = require("./check-stock");
 const { startCommandListener } = require("./commands");
 const { sendMessage } = require("./telegram");
 
@@ -10,7 +10,6 @@ const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;
 const FAILURE_ALERT_THRESHOLD = 3; // consecutive failures before first alert
 const FAILURE_ALERT_REPEAT_EVERY = 15; // re-alert every N further failures
 
-let consecutiveFailures = 0;
 let alerted = false;
 
 function describeError(err) {
@@ -37,13 +36,12 @@ async function tick() {
     await checkOnce({ testMode: false });
 
     if (alerted) {
-      await notifyAdmin(`✅ 재고 확인 복구됨 (연속 실패 ${consecutiveFailures}회 후)`);
+      await notifyAdmin("✅ 재고 확인 복구됨");
       alerted = false;
     }
-    consecutiveFailures = 0;
   } catch (err) {
-    consecutiveFailures += 1;
     console.error(`[${new Date().toISOString()}] check failed:`, err);
+    const { consecutiveFailures } = getStatus();
 
     const shouldAlert =
       consecutiveFailures === FAILURE_ALERT_THRESHOLD ||

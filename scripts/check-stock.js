@@ -11,9 +11,12 @@ const PAGE_CONCURRENCY = 4;
 
 let busy = false;
 let lastResult = null;
+let consecutiveFailures = 0;
+let lastError = null;
+const startedAt = new Date();
 
-function getLastResult() {
-  return lastResult;
+function getStatus() {
+  return { startedAt, lastResult, consecutiveFailures, lastError };
 }
 
 const headers = {
@@ -166,6 +169,8 @@ async function checkOnce({ testMode = TEST_MODE } = {}) {
   try {
     const { total, items } = await loadItems();
     lastResult = { checkedAt: new Date(), total, items };
+    consecutiveFailures = 0;
+    lastError = null;
 
     if (testMode) {
       const sample = items.slice(0, 3);
@@ -211,12 +216,16 @@ async function checkOnce({ testMode = TEST_MODE } = {}) {
 
     saveState(currentIds);
     return { skipped: false, total, newItems };
+  } catch (err) {
+    consecutiveFailures += 1;
+    lastError = { message: err.message, status: err.status, at: new Date() };
+    throw err;
   } finally {
     busy = false;
   }
 }
 
-module.exports = { checkOnce, getLastResult, buildMessage };
+module.exports = { checkOnce, getStatus, buildMessage };
 
 if (require.main === module) {
   checkOnce().catch((err) => {
