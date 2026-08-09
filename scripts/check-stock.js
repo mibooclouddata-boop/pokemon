@@ -1,11 +1,18 @@
 const fs = require("fs");
 const path = require("path");
+const { sendMessage } = require("./telegram");
 
 const STATE_FILE = path.join(__dirname, "..", "state", "last_stock.json");
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const TEST_MODE = process.env.TEST_MODE === "true";
 const MAX_ITEMS_IN_MESSAGE = 30;
+
+let busy = false;
+let lastResult = null;
+
+function getLastResult() {
+  return lastResult;
+}
 
 const headers = {
   clientid: "HJGfZ5jPHZk3/PEOkm+/Qw==",
@@ -88,73 +95,70 @@ function buildMessage(items, total, title) {
 }
 
 async function sendTelegram(text) {
-  const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: TELEGRAM_CHAT_ID,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Telegram send failed: ${res.status} ${body}`);
-  }
+  await sendMessage(TELEGRAM_CHAT_ID, text);
 }
 
 async function checkOnce({ testMode = TEST_MODE } = {}) {
-  const { total, items } = await loadItems();
+  if (busy) {
+    console.log("Check already in progress, skipping.");
+    return { skipped: true };
+  }
+  busy = true;
 
-  if (testMode) {
-    const sample = items.slice(0, 3);
-    if (sample.length === 0) {
-      console.log("Test mode - no items currently on sale to sample.");
-      return;
+  try {
+    const { total, items } = await loadItems();
+    lastResult = { checkedAt: new Date(), total, items };
+
+    if (testMode) {
+      const sample = items.slice(0, 3);
+      if (sample.length === 0) {
+        console.log("Test mode - no items currently on sale to sample.");
+        return { skipped: false, total, newItems: [] };
+      }
+      const message = buildMessage(
+        sample,
+        total,
+        `🧪 [테스트] 알림 동작 확인용 메시지입니다 (실제 재입고 아님)`
+      );
+      await sendTelegram(message);
+      console.log("Test mode - sent sample notification, state not changed.");
+      return { skipped: false, total, newItems: [] };
     }
-    const message = buildMessage(
-      sample,
-      total,
-      `🧪 [테스트] 알림 동작 확인용 메시지입니다 (실제 재입고 아님)`
-    );
-    await sendTelegram(message);
-    console.log("Test mode - sent sample notification, state not changed.");
-    return;
-  }
 
-  const prevIds = loadPrevIds();
-  const currentIds = items.map((p) => p.productNo);
+    const prevIds = loadPrevIds();
+    const currentIds = items.map((p) => p.productNo);
 
-  if (prevIds === null) {
-    console.log(
-      `Initial run - saved ${currentIds.length} items as baseline, no notification sent.`
-    );
+    if (prevIds === null) {
+      console.log(
+        `Initial run - saved ${currentIds.length} items as baseline, no notification sent.`
+      );
+      saveState(currentIds);
+      return { skipped: false, total, newItems: [] };
+    }
+
+    const prevSet = new Set(prevIds);
+    const newItems = items.filter((p) => !prevSet.has(p.productNo));
+
+    if (newItems.length > 0) {
+      const message = buildMessage(
+        newItems,
+        total,
+        `🎉 새로 구매 가능한 상품 ${newItems.length}개!`
+      );
+      await sendTelegram(message);
+      console.log(`Notified about ${newItems.length} new items.`);
+    } else {
+      console.log("No new items.");
+    }
+
     saveState(currentIds);
-    return;
+    return { skipped: false, total, newItems };
+  } finally {
+    busy = false;
   }
-
-  const prevSet = new Set(prevIds);
-  const newItems = items.filter((p) => !prevSet.has(p.productNo));
-
-  if (newItems.length > 0) {
-    const message = buildMessage(
-      newItems,
-      total,
-      `🎉 새로 구매 가능한 상품 ${newItems.length}개!`
-    );
-    await sendTelegram(message);
-    console.log(`Notified about ${newItems.length} new items.`);
-  } else {
-    console.log("No new items.");
-  }
-
-  saveState(currentIds);
 }
 
-module.exports = { checkOnce };
+module.exports = { checkOnce, getLastResult, buildMessage };
 
 if (require.main === module) {
   checkOnce().catch((err) => {
