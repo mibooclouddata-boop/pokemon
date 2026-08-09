@@ -1,16 +1,19 @@
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
-async function sendMessage(chatId, text) {
+async function sendMessage(chatId, text, { replyMarkup } = {}) {
+  const body = {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  };
+  if (replyMarkup) body.reply_markup = replyMarkup;
+
   const res = await fetch(`${API}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
